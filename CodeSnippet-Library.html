@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>📘 TypeScript Snippet Manager</title>
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" rel="stylesheet">
+
+<style>
+body{
+    overflow:hidden;
+    background:#f5f6f8;
+}
+
+#sidebar{
+    height:100vh;
+    overflow-y:auto;
+    border-right:1px solid #ddd;
+    background:#fff;
+}
+
+#content{
+    height:100vh;
+    overflow-y:auto;
+    padding:20px;
+}
+
+.snippet-card{
+    margin-bottom:20px;
+    box-shadow:0 2px 5px rgba(0,0,0,0.08);
+}
+
+.folder-header{
+    font-weight:bold;
+    color:#0d6efd;
+    margin-top:10px;
+}
+
+pre{
+    border-radius:8px;
+}
+
+.badge-keyword{
+    margin-right:5px;
+}
+
+.code-title{
+    font-weight:bold;
+    margin-bottom:5px;
+    color:#0d6efd;
+}
+
+#codeEditor{
+    height:250px;
+    font-family:Consolas, monospace;
+}
+
+.sidebar-link{
+    text-decoration:none;
+    color:#444;
+}
+
+.sidebar-link:hover{
+    color:#0d6efd;
+}
+
+.toolbar{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+}
+</style>
+
+</head>
+
+<body>
+
+<div class="container-fluid">
+<div class="row">
+
+<div class="col-md-3" id="sidebar">
+
+<div class="p-3">
+
+<h4>📂 Snippet Explorer</h4>
+
+<hr>
+
+<div id="categoryTree"></div>
+
+</div>
+
+</div>
+
+<div class="col-md-9" id="content">
+
+<div class="d-flex justify-content-between align-items-center flex-wrap">
+
+<h2>📘 My Code Snippet Library</h2>
+
+<div class="toolbar">
+
+<button class="btn btn-success" id="btnExport">
+<i class="fa fa-download"></i> Export
+</button>
+
+<button class="btn btn-warning" id="btnImport">
+<i class="fa fa-upload"></i> Import
+</button>
+
+<button class="btn btn-primary" id="btnAddSnippet">
+<i class="fa fa-plus"></i> Add Snippet
+</button>
+
+</div>
+
+</div>
+
+<hr>
+
+<input
+type="text"
+class="form-control mb-3"
+id="txtSearch"
+placeholder="🔍 Search title, description, keywords, category or code">
+
+<input
+type="file"
+id="fileImport"
+accept=".json"
+style="display:none">
+
+<div id="snippetContainer"></div>
+
+</div>
+
+</div>
+</div>
+
+<!-- Modal -->
+
+<div class="modal fade" id="snippetModal">
+
+<div class="modal-dialog modal-xl">
+
+<div class="modal-content">
+
+<div class="modal-header">
+<h5 id="modalTitle">Add Snippet</h5>
+
+<button
+class="btn-close"
+data-bs-dismiss="modal"> </button>
+
+</div>
+
+<div class="modal-body">
+
+<div class="row">
+
+<div class="col-md-6 mb-3">
+<label class="form-label">Title</label>
+<input id="snippetTitle" class="form-control">
+</div>
+
+<div class="col-md-6 mb-3">
+<label class="form-label">Keywords (comma separated)</label>
+<input id="snippetKeywords" class="form-control">
+</div>
+
+</div>
+
+<div class="mb-3">
+<label class="form-label">Description</label>
+<textarea
+id="snippetDescription"
+class="form-control"></textarea>
+</div>
+
+<div class="row">
+
+<div class="col-md-6 mb-3">
+
+<label class="form-label">
+Choose Category
+</label>
+
+<select
+id="categorySelect"
+class="form-select"> </select>
+
+</div>
+
+<div class="col-md-6 mb-3">
+
+<label class="form-label">
+Or New Category
+</label>
+
+<input
+id="newCategory"
+class="form-control">
+
+</div>
+
+</div>
+
+<div class="mb-3">
+
+<label class="form-label">
+TypeScript Code
+</label>
+
+<textarea
+id="codeEditor"
+class="form-control"></textarea>
+
+</div>
+
+</div>
+
+<div class="modal-footer">
+
+<button
+class="btn btn-success"
+id="saveSnippet">
+Save </button>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-typescript.min.js"></script>
+
+<script>
+
+const STORAGE_KEY = "TS_SNIPPET_MANAGER";
+
+let snippets = [];
+let editMode = false;
+let editingId = null;
+
+const modal =
+new bootstrap.Modal(
+document.getElementById("snippetModal")
+);
+
+function saveData(){
+localStorage.setItem(
+STORAGE_KEY,
+JSON.stringify(snippets)
+);
+}
+
+function loadData(){
+
+let data =
+localStorage.getItem(
+STORAGE_KEY
+);
+
+if(data){
+
+snippets =
+JSON.parse(data);
+
+}else{
+
+snippets = [
+
+{
+id:Date.now(),
+
+title:"Observable Example",
+
+description:
+"RxJS Observable Example",
+
+category:"RxJS",
+
+keywords:[
+"rxjs",
+"observable"
+],
+
+codes:[
+`import { Observable } from 'rxjs';
+
+const obs = new Observable(subscriber => {
+ subscriber.next('Hello');
+ subscriber.complete();
+});`
+],
+
+createdDate:
+new Date().toISOString(),
+
+modifiedDate:
+new Date().toISOString()
+}
+
+];
+
+saveData();
+
+}
+
+renderAll();
+}
+
+function escapeHtml(text){
+
+return text
+.replace(/&/g,"&amp;")
+.replace(/</g,"&lt;")
+.replace(/>/g,"&gt;");
+}
+
+function renderCategories(){
+
+let categories =
+[...new Set(
+snippets.map(
+s=>s.category
+)
+)];
+
+let html="";
+
+categories.forEach(cat=>{
+
+html += `
+<div class="folder-header">
+📁 ${cat}
+</div>
+
+<ul class="list-unstyled ms-3">
+`;
+
+snippets
+.filter(
+s=>s.category===cat
+)
+.forEach(s=>{
+
+html += `
+<li>
+<a
+class="sidebar-link"
+href="#snippet-${s.id}">
+${s.title}
+</a>
+</li>
+`;
+
+});
+
+html += "</ul>";
+
+});
+
+$("#categoryTree").html(html);
+
+$("#categorySelect").html(
+categories.map(
+c=>`<option>${c}</option>`
+).join("")
+);
+
+}
+
+function renderSnippets(list=snippets){
+
+let html="";
+
+list.forEach(item=>{
+
+html += `
+
+<div
+class="card snippet-card"
+id="snippet-${item.id}">
+
+<div class="card-header d-flex justify-content-between align-items-center">
+
+<div>
+    <table style="width:100%;border-collapse:collapse;">
+        <tr>
+            <td class="code-title"><h5>${item.title}</h5></td>
+            <td style="padding-left:10px;font-size:0.675em;">Tags:</td>
+            <td class="text-muted small" style="padding-left:10px;">
+                <div class="mb-2">
+                    ${item.keywords.map(
+                        k => `<span class="badge bg-secondary badge-keyword">${k}</span>`
+                    ).join("")}
+                </div>
+            </td>
+        </tr>
+    </table>
+
+
+</div>
+
+<div>
+
+<button
+class="btn btn-sm btn-outline-secondary duplicate-btn"
+data-id="${item.id}">
+<i class="fa fa-copy"></i>
+</button>
+
+<button
+class="btn btn-sm btn-outline-primary edit-btn"
+data-id="${item.id}">
+<i class="fa fa-edit"></i>
+</button>
+
+<button
+class="btn btn-sm btn-outline-danger delete-btn"
+data-id="${item.id}">
+<i class="fa fa-trash"></i>
+</button>
+
+</div>
+
+</div>
+
+<div class="card-body">
+
+<p>${item.description}</p>
+
+
+
+${item.codes.map((code,index)=>`
+
+<pre>
+<code class="language-typescript">
+${escapeHtml(code)}
+</code>
+</pre>
+
+<div class="d-flex gap-2">
+<button class="btn btn-sm btn-outline-success copy-code" data-code="${encodeURIComponent(code)}"><i class="fa fa-copy"></i> Copy</button>
+<div class="text-muted small">Category: ${item.category} | Created: ${new Date(item.createdDate).toLocaleString()} | Modified: ${new Date(item.modifiedDate).toLocaleString()}</div>
+</div>
+
+<hr>
+
+`).join("")}
+
+</div>
+
+</div>
+`;
+
+});
+
+$("#snippetContainer").html(html);
+
+Prism.highlightAll();
+}
+
+function renderAll(){
+
+renderCategories();
+
+renderSnippets();
+
+}
+
+function clearModal(){
+
+$("#snippetTitle").val("");
+$("#snippetDescription").val("");
+$("#snippetKeywords").val("");
+$("#newCategory").val("");
+$("#codeEditor").val("");
+
+editMode=false;
+editingId=null;
+
+$("#modalTitle").text(
+"Add Snippet"
+);
+
+}
+
+$("#btnAddSnippet").click(()=>{
+
+clearModal();
+
+modal.show();
+
+});
+
+$("#saveSnippet").click(function(){
+
+let category =
+$("#newCategory").val().trim()
+||
+$("#categorySelect").val()
+||
+"General";
+
+let data = {
+
+title:
+$("#snippetTitle").val(),
+
+description:
+$("#snippetDescription").val(),
+
+keywords:
+$("#snippetKeywords")
+.val()
+.split(",")
+.map(x=>x.trim())
+.filter(x=>x),
+
+category,
+
+codes:[
+$("#codeEditor").val()
+],
+
+modifiedDate:
+new Date().toISOString()
+
+};
+
+if(editMode){
+
+let idx =
+snippets.findIndex(
+x=>x.id===editingId
+);
+
+snippets[idx] = {
+
+...snippets[idx],
+...data
+
+};
+
+}else{
+
+snippets.push({
+
+id:Date.now(),
+
+createdDate:
+new Date().toISOString(),
+
+...data
+
+});
+
+}
+
+saveData();
+
+renderAll();
+
+modal.hide();
+
+});
+
+$(document).on(
+"click",
+".edit-btn",
+function(){
+
+let id =
+Number($(this).data("id"));
+
+let item =
+snippets.find(
+x=>x.id===id
+);
+
+editMode=true;
+editingId=id;
+
+$("#modalTitle").text(
+"Edit Snippet"
+);
+
+$("#snippetTitle").val(
+item.title
+);
+
+$("#snippetDescription").val(
+item.description
+);
+
+$("#snippetKeywords").val(
+item.keywords.join(",")
+);
+
+$("#categorySelect").val(
+item.category
+);
+
+$("#codeEditor").val(
+item.codes[0]
+);
+
+modal.show();
+
+});
+
+$(document).on(
+"click",
+".delete-btn",
+function(){
+
+let id =
+Number($(this).data("id"));
+
+if(
+confirm(
+"Delete this snippet?"
+)
+){
+
+snippets =
+snippets.filter(
+x=>x.id!==id
+);
+
+saveData();
+
+renderAll();
+
+}
+
+});
+
+$(document).on(
+"click",
+".duplicate-btn",
+function(){
+
+let id =
+Number($(this).data("id"));
+
+let item =
+structuredClone(
+snippets.find(
+x=>x.id===id
+)
+);
+
+item.id =
+Date.now();
+
+item.title +=
+" (Copy)";
+
+item.createdDate =
+new Date().toISOString();
+
+item.modifiedDate =
+new Date().toISOString();
+
+snippets.push(item);
+
+saveData();
+
+renderAll();
+
+});
+
+$(document).on(
+"click",
+".copy-code",
+function(){
+
+navigator.clipboard.writeText(
+decodeURIComponent(
+$(this).data("code")
+)
+);
+
+});
+
+$("#txtSearch").on(
+"keyup",
+function(){
+
+let text =
+$(this)
+.val()
+.toLowerCase();
+
+let filtered =
+snippets.filter(item=>{
+
+let searchText =
+JSON.stringify(item)
+.toLowerCase();
+
+return searchText.includes(text);
+
+});
+
+renderSnippets(filtered);
+
+});
+
+$("#btnExport").click(function(){
+
+let json =
+JSON.stringify(
+snippets,
+null,
+4
+);
+
+let blob =
+new Blob(
+[json],
+{
+type:
+"application/json"
+}
+);
+
+let url =
+URL.createObjectURL(blob);
+
+let a =
+document.createElement("a");
+
+a.href = url;
+
+a.download =
+"typescript-snippets.json";
+
+a.click();
+
+URL.revokeObjectURL(url);
+
+});
+
+$("#btnImport").click(function(){
+
+$("#fileImport").click();
+
+});
+
+$("#fileImport").change(function(e){
+
+let file =
+e.target.files[0];
+
+if(!file) return;
+
+let reader =
+new FileReader();
+
+reader.onload =
+function(event){
+
+try{
+
+let imported =
+JSON.parse(
+event.target.result
+);
+
+if(
+!Array.isArray(imported)
+){
+throw "Invalid";
+}
+
+if(
+confirm(
+"Replace existing snippets?\n\nOK = Replace\nCancel = Merge"
+)
+){
+
+snippets =
+imported;
+
+}else{
+
+imported.forEach(item=>{
+
+let exists =
+snippets.some(
+x=>x.id===item.id
+);
+
+if(!exists){
+snippets.push(item);
+}
+
+});
+
+}
+
+saveData();
+
+renderAll();
+
+alert(
+"Import completed."
+);
+
+}
+catch{
+
+alert(
+"Invalid JSON file."
+);
+
+}
+
+};
+
+reader.readAsText(file);
+
+});
+
+loadData();
+
+</script>
+
+</body>
+</html>
